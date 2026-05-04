@@ -1,0 +1,30 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  skills-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install thetabook from source
+        # Until thetabook publishes wheels, install from the main branch.
+        # Pin to a tag once one exists; the registry's lint contract is
+        # tied to the SkillFrontmatter schema in src/thetabook/skills/.
+        run: pip install "git+https://github.com/subsriram/thetabook.git@main"
+
+      - name: Lint core/
+        if: hashFiles('core/**/*.md') != ''
+        run: thetabook skills lint core --fail-on-error
+
+      - name: Lint community/
+        if: hashFiles('community/**/*.md') != ''
+        run: thetabook skills lint community --fail-on-error

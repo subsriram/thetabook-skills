@@ -9,7 +9,7 @@ description: |
   user can tune without forking. Use when the user asks "what's
   interesting in my watchlist", "where's the rich vol", or wants a
   one-pass options-context table.
-version: 0.2.0
+version: 0.2.1
 tier: community
 allowed-tools: [Bash]
 reads: [personal/snapshots, personal/watchlist.toml, personal/iv_history]
@@ -40,10 +40,10 @@ For each ticker, fetches near + far chains, computes the vol-surface metrics, ap
 When `/scan-watchlist` runs, execute the helper via the Bash tool:
 
 ```
-~/.local/bin/uv run python "$CLAUDE_PROJECT_DIR/.claude/skills/scan-watchlist/scan.py" $ARGUMENTS
+~/.local/bin/uv run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/scan-watchlist/scan.py" $ARGUMENTS
 ```
 
-If `$CLAUDE_PROJECT_DIR` isn't set, substitute the absolute path to the project root. Print stdout to the user as-is. If stderr contains anything beyond `Scanning N tickers × 2 expiries...` and per-ticker `chain fetch failed: …` lines, surface it as bullet points.
+The `${CLAUDE_PROJECT_DIR:-$PWD}` form uses the harness-set env var when present and falls back to the current directory otherwise — covers both the standard slash-command flow and direct Bash-tool invocation from the project root. Print stdout to the user as-is. If stderr contains anything beyond `Scanning N tickers × 2 expiries...` and per-ticker `chain fetch failed: …` lines, surface it as bullet points.
 
 After the helper exits, offer next steps: *"Want to dig into any of these? `/chain <T>` to drill into a chain, `/idea` to draft a trade, or `/evaluate <id>` if one maps to an existing idea."*
 

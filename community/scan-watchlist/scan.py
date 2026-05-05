@@ -18,12 +18,15 @@ import argparse
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+
+SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 UV = os.path.expanduser("~/.local/bin/uv")
 SHARE_ASSET_TYPES = {"EQUITY", "ETF", "COLLECTIVE_INVESTMENT", "MUTUAL_FUND"}
@@ -299,14 +302,21 @@ def update_history_and_rank(
 
 
 def get_holdings(personal: Path) -> dict[str, dict]:
-    """{ticker: {"shares": bool, "options": bool}} from latest snapshot."""
+    """{ticker: {"shares": bool, "options": bool}} from latest snapshot.
+
+    Snapshot files are named ``YYYY-MM-DD.json`` per thetabook convention.
+    Cache files (``earnings_cache.json``, ``dividends_cache.json``) live in
+    the same directory and get rewritten by the skill's own CLI calls during
+    a scan, so picking the freshest by mtime would resolve to the cache —
+    which has no ``accounts`` key. Lex-sort on the ISO-dated stems instead.
+    """
     snap_dir = personal / "snapshots"
     if not snap_dir.exists():
         return {}
-    snap_files = [f for f in snap_dir.glob("*.json") if not f.name.startswith("dividends_cache")]
+    snap_files = [f for f in snap_dir.glob("*.json") if SNAPSHOT_NAME_RE.fullmatch(f.stem)]
     if not snap_files:
         return {}
-    latest = max(snap_files, key=lambda p: p.stat().st_mtime)
+    latest = max(snap_files, key=lambda p: p.stem)
     snap = json.loads(latest.read_text())
     h: dict[str, dict] = {}
     for acct in snap.get("accounts", []):

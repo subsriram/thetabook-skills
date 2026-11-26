@@ -40,10 +40,10 @@ For each ticker, fetches near + far chains, computes the vol-surface metrics, ap
 When `/scan-watchlist` runs, execute the helper via the Bash tool:
 
 ```
-~/.local/bin/uv run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/scan-watchlist/scan.py" $ARGUMENTS
+"$(command -v uv || for p in ~/.local/bin/uv /opt/homebrew/bin/uv /usr/local/bin/uv; do [ -x "$p" ] && echo "$p" && break; done)" run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/scan-watchlist/scan.py" $ARGUMENTS
 ```
 
-The `${CLAUDE_PROJECT_DIR:-$PWD}` form uses the harness-set env var when present and falls back to the current directory otherwise — covers both the standard slash-command flow and direct Bash-tool invocation from the project root. Print stdout to the user as-is. If stderr contains anything beyond `Scanning N tickers × 2 expiries...` and per-ticker `chain fetch failed: …` lines, surface it as bullet points.
+The `$(command -v uv || …)` part finds uv wherever it is installed: on `PATH`, at the standalone installer's `~/.local/bin/uv`, or under Homebrew. The helper then runs the thetabook CLI with that same uv. The `${CLAUDE_PROJECT_DIR:-$PWD}` form uses the harness-set env var when present and falls back to the current directory otherwise — covers both the standard slash-command flow and direct Bash-tool invocation from the project root. Print stdout to the user as-is. If stderr contains anything beyond `Scanning N tickers × 2 expiries...` and per-ticker `chain fetch failed: …` lines, surface it as bullet points.
 
 After the helper exits, offer next steps: *"Want to dig into any of these? `/chain <T>` to drill into a chain, `/idea` to draft a trade, or `/evaluate <id>` if one maps to an existing idea."*
 

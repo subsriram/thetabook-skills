@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -36,7 +37,31 @@ SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 # thetabook only through its CLI.
 ODD_EXPIRY_CYCLE: frozenset[str] = frozenset({"VIX", "VIXW"})
 
-UV = os.path.expanduser("~/.local/bin/uv")
+
+def _find_uv() -> str:
+    """The uv binary to run the thetabook CLI with.
+
+    ``uv run`` sets ``UV`` to its own path for the process it starts, so the
+    uv that launched this helper is used first, wherever it is installed.
+    Then the standalone installer's ``~/.local/bin/uv``, uv on ``PATH``, and
+    Homebrew's two prefixes, for a helper started some other way (a cron
+    job's PATH is minimal). Falls back to plain ``uv`` so a miss fails with a
+    clear "No such file" naming it.
+    """
+    candidates = [
+        os.environ.get("UV"),
+        os.path.expanduser("~/.local/bin/uv"),
+        shutil.which("uv"),
+        "/opt/homebrew/bin/uv",
+        "/usr/local/bin/uv",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return "uv"
+
+
+UV = _find_uv()
 SHARE_ASSET_TYPES = {"EQUITY", "ETF", "COLLECTIVE_INVESTMENT", "MUTUAL_FUND"}
 TODAY = date.today().isoformat()
 

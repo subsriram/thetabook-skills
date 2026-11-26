@@ -44,7 +44,7 @@ Soft warnings (don't block but worth fixing): `description` under 40 chars, body
 thetabook skills lint community/<slug> --fail-on-error
 ```
 
-Requires `thetabook` installed (`pip install git+https://github.com/subsriram/thetabook.git@main`). The CI workflow uses the same command against `core/` and `community/` separately.
+Requires `thetabook` installed (`pip install "thetabook==2.4.0"`, the version CI pins in `.github/workflows/lint.yml`). The CI workflow runs the same lint against `core/` and `community/` separately.
 
 ## Don't
 

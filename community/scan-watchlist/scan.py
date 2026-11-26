@@ -308,7 +308,9 @@ def update_history_and_rank(
 ) -> tuple[float | str, int]:
     h_dir = personal / "iv_history"
     h_dir.mkdir(parents=True, exist_ok=True)
-    f = h_dir / f"{ticker}.jsonl"
+    # One file per ticker, flat: a share class's "/" (BRK/B) made the name a
+    # path into a directory that doesn't exist, and the append crashed the scan.
+    f = h_dir / f"{ticker.replace('/', '-')}.jsonl"
     history = []
     if f.exists():
         for line in f.read_text().splitlines():

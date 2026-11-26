@@ -106,7 +106,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full schema (optional fields like
 ### 3. Lint locally
 
 ```bash
-pip install "git+https://github.com/subsriram/thetabook.git@main"
+pip install "thetabook==2.4.0"
 thetabook skills lint community/<slug> --fail-on-error
 ```
 

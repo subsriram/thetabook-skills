@@ -9,7 +9,7 @@ description: |
   user can tune without forking. Use when the user asks "what's
   interesting in my watchlist", "where's the rich vol", or wants a
   one-pass options-context table.
-version: 0.2.1
+version: 0.2.2
 tier: community
 allowed-tools: [Bash]
 reads: [personal/snapshots, personal/watchlist.toml, personal/iv_history]
@@ -65,6 +65,7 @@ scan.py [TICKERS...] [flags]
 - `--expiry YYYY-MM-DD` — pin the near-leg expiry; overrides `--dte`.
 - `--dte N` — near-leg target DTE (default 30). Picks the soonest expiry at or beyond N.
 - `--term-dte N` — far-leg target DTE for term-structure slope (default 60).
+- VIX and VIXW options expire on Wednesdays, off the monthly Friday cycle. They get their own near/far expiry at the same target DTEs, named in the Notes column; the scan-wide pair is taken from the first other ticker.
 
 ### Decision-tree thresholds (defaults are starting heuristics)
 

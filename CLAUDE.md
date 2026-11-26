@@ -36,7 +36,7 @@ Soft warnings (don't block but worth fixing): `description` under 40 chars, body
 - New skills start at `version: 0.1.0`. Bump on observable behavior change (semver).
 - Skill `description:` should be a paragraph (≥40 chars) — the LLM uses it for trigger matching.
 - Personal/opinionated overrides do NOT belong here — those live in the consuming repo as `.local` skills (gitignored upstream).
-- Helper scripts run via `uv run python "$CLAUDE_PROJECT_DIR/.claude/commands/<slug>/<helper>.py"` and must exit cleanly on `--help`. Don't hard-code `~/.local/bin/uv`: a Homebrew uv lives elsewhere. Find uv the way `community/scan-watchlist` does (its SKILL.md invocation line, and `_find_uv` in `scan.py` for the CLI calls it makes).
+- Helper scripts run via `uv run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/<slug>/<helper>.py"` (`thetabook skills install` copies skills into `.claude/skills/`) and must exit cleanly on `--help`. Don't hard-code `~/.local/bin/uv`: a Homebrew uv lives elsewhere. Find uv the way `community/scan-watchlist` does (its SKILL.md invocation line, and `_find_uv` in `scan.py` for the CLI calls it makes).
 
 ## Linting locally
 

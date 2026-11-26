@@ -43,15 +43,15 @@ def _find_uv() -> str:
 
     ``uv run`` sets ``UV`` to its own path for the process it starts, so the
     uv that launched this helper is used first, wherever it is installed.
-    Then the standalone installer's ``~/.local/bin/uv``, uv on ``PATH``, and
-    Homebrew's two prefixes, for a helper started some other way (a cron
-    job's PATH is minimal). Falls back to plain ``uv`` so a miss fails with a
-    clear "No such file" naming it.
+    Then uv on ``PATH``, the standalone installer's ``~/.local/bin/uv``, and
+    Homebrew's two prefixes (the same order as the SKILL.md invocation), for a
+    helper started some other way (a cron job's PATH is minimal). Falls back
+    to plain ``uv`` so a miss fails with a clear "No such file" naming it.
     """
     candidates = [
         os.environ.get("UV"),
-        os.path.expanduser("~/.local/bin/uv"),
         shutil.which("uv"),
+        os.path.expanduser("~/.local/bin/uv"),
         "/opt/homebrew/bin/uv",
         "/usr/local/bin/uv",
     ]
@@ -624,20 +624,28 @@ def main() -> None:
     holdings = get_holdings(personal)
 
     # An odd-cycle ticker resolves its own near/far expiry off its own
-    # expiration list, at the DTEs everyone else got.
+    # expiration list, at the same target DTEs (not the DTEs the reference
+    # ticker happened to land on, which would push it a cycle further out).
+    # A pinned --expiry is kept when the ticker lists it.
     ticker_near: dict[str, tuple[str, int]] = {}
     ticker_far: dict[str, tuple[str, int]] = {}
     expiry_note: dict[str, str] = {}
     for tk in tickers:
         if tk.upper().lstrip("$^") in ODD_EXPIRY_CYCLE:
-            try:
-                own = fetch_expirations(tk)
-            except Exception as e:
-                print(f"expirations fetch failed: {tk}: {e}", file=sys.stderr)
-                own = []
+            if tk == reference:
+                own = expirations
+            else:
+                try:
+                    own = fetch_expirations(tk)
+                except Exception as e:
+                    print(f"expirations fetch failed: {tk}: {e}", file=sys.stderr)
+                    own = []
             if own:
-                ticker_near[tk] = pick_expiry(own, near_dte)
-                ticker_far[tk] = pick_expiry(own, far_dte)
+                if args.expiry and args.expiry in own:
+                    ticker_near[tk] = (near_expiry, near_dte)
+                else:
+                    ticker_near[tk] = pick_expiry(own, near_dte if args.expiry else args.dte)
+                ticker_far[tk] = pick_expiry(own, args.term_dte)
                 (tn, tn_dte), (tf, tf_dte) = ticker_near[tk], ticker_far[tk]
                 if (tn, tf) != (near_expiry, far_expiry):
                     expiry_note[tk] = (

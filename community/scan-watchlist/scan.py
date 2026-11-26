@@ -19,6 +19,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -28,7 +29,39 @@ from pathlib import Path
 
 SNAPSHOT_NAME_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
-UV = os.path.expanduser("~/.local/bin/uv")
+# Tickers whose options don't sit on the standard monthly Friday cycle, so the
+# scan-wide near/far expiry (picked from the first other ticker's list) usually
+# isn't listed for them: VIX options expire on Wednesdays. Each gets its own
+# pair at the same target DTEs. The same set as thetabook's
+# `tickers.FORWARD_SETTLED` today, kept here because this helper talks to
+# thetabook only through its CLI.
+ODD_EXPIRY_CYCLE: frozenset[str] = frozenset({"VIX", "VIXW"})
+
+
+def _find_uv() -> str:
+    """The uv binary to run the thetabook CLI with.
+
+    ``uv run`` sets ``UV`` to its own path for the process it starts, so the
+    uv that launched this helper is used first, wherever it is installed.
+    Then uv on ``PATH``, the standalone installer's ``~/.local/bin/uv``, and
+    Homebrew's two prefixes (the same order as the SKILL.md invocation), for a
+    helper started some other way (a cron job's PATH is minimal). Falls back
+    to plain ``uv`` so a miss fails with a clear "No such file" naming it.
+    """
+    candidates = [
+        os.environ.get("UV"),
+        shutil.which("uv"),
+        os.path.expanduser("~/.local/bin/uv"),
+        "/opt/homebrew/bin/uv",
+        "/usr/local/bin/uv",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return "uv"
+
+
+UV = _find_uv()
 SHARE_ASSET_TYPES = {"EQUITY", "ETF", "COLLECTIVE_INVESTMENT", "MUTUAL_FUND"}
 TODAY = date.today().isoformat()
 
@@ -275,7 +308,9 @@ def update_history_and_rank(
 ) -> tuple[float | str, int]:
     h_dir = personal / "iv_history"
     h_dir.mkdir(parents=True, exist_ok=True)
-    f = h_dir / f"{ticker}.jsonl"
+    # One file per ticker, flat: a share class's "/" (BRK/B) made the name a
+    # path into a directory that doesn't exist, and the append crashed the scan.
+    f = h_dir / f"{ticker.replace('/', '-')}.jsonl"
     history = []
     if f.exists():
         for line in f.read_text().splitlines():
@@ -458,6 +493,8 @@ def render(
     any_note = False
     for r in rows:
         notes = []
+        if r.get("expiry_note"):
+            notes.append(r["expiry_note"])
         if r["rank"] == "INSUFFICIENT":
             notes.append(f"IV history thin ({r['hist_n']}/{t.min_history_days} days)")
         if r["earn_in_window"]:
@@ -561,9 +598,12 @@ def main() -> None:
             f"{personal / 'watchlist.toml'} under [watchlist] tickers."
         )
 
-    expirations = fetch_expirations(tickers[0])
+    # The scan-wide pair comes from a regular-cycle ticker when there is one:
+    # with VIX first, every other ticker was sent VIX's Wednesday expiries.
+    reference = next((tk for tk in tickers if tk.upper().lstrip("$^") not in ODD_EXPIRY_CYCLE), tickers[0])
+    expirations = fetch_expirations(reference)
     if not expirations:
-        sys.exit(f"No expirations for {tickers[0]}")
+        sys.exit(f"No expirations for {reference}")
 
     if args.expiry:
         near_expiry = args.expiry
@@ -583,8 +623,41 @@ def main() -> None:
     dividends = fetch_dividends(tickers)
     holdings = get_holdings(personal)
 
+    # An odd-cycle ticker resolves its own near/far expiry off its own
+    # expiration list, at the same target DTEs (not the DTEs the reference
+    # ticker happened to land on, which would push it a cycle further out).
+    # A pinned --expiry is kept when the ticker lists it.
+    ticker_near: dict[str, tuple[str, int]] = {}
+    ticker_far: dict[str, tuple[str, int]] = {}
+    expiry_note: dict[str, str] = {}
+    for tk in tickers:
+        if tk.upper().lstrip("$^") in ODD_EXPIRY_CYCLE:
+            if tk == reference:
+                own = expirations
+            else:
+                try:
+                    own = fetch_expirations(tk)
+                except Exception as e:
+                    print(f"expirations fetch failed: {tk}: {e}", file=sys.stderr)
+                    own = []
+            if own:
+                if args.expiry and args.expiry in own:
+                    ticker_near[tk] = (near_expiry, near_dte)
+                else:
+                    ticker_near[tk] = pick_expiry(own, near_dte if args.expiry else args.dte)
+                ticker_far[tk] = pick_expiry(own, args.term_dte)
+                (tn, tn_dte), (tf, tf_dte) = ticker_near[tk], ticker_far[tk]
+                if (tn, tf) != (near_expiry, far_expiry):
+                    expiry_note[tk] = (
+                        f"odd expiry cycle — own near {tn} ({tn_dte} DTE) / far {tf} ({tf_dte} DTE), "
+                        "not the scan-wide pair"
+                    )
+                continue
+        ticker_near[tk] = (near_expiry, near_dte)
+        ticker_far[tk] = (far_expiry, far_dte)
+
     chains: dict[tuple[str, str], list[dict] | None] = {}
-    specs = [(tk, near_expiry) for tk in tickers] + [(tk, far_expiry) for tk in tickers]
+    specs = [(tk, ticker_near[tk][0]) for tk in tickers] + [(tk, ticker_far[tk][0]) for tk in tickers]
 
     def _fetch(spec: tuple[str, str]) -> tuple[tuple[str, str], list[dict] | None]:
         try:
@@ -603,10 +676,12 @@ def main() -> None:
         if not spot:
             print(f"price missing for {tk}; skipping", file=sys.stderr)
             continue
-        near = chains.get((tk, near_expiry))
-        far = chains.get((tk, far_expiry))
-        nm = derive_metrics(near, spot, near_dte) if near else None
-        fm = derive_metrics(far, spot, far_dte) if far else None
+        tn_expiry, tn_dte = ticker_near[tk]
+        tf_expiry, tf_dte = ticker_far[tk]
+        near = chains.get((tk, tn_expiry))
+        far = chains.get((tk, tf_expiry))
+        nm = derive_metrics(near, spot, tn_dte) if near else None
+        fm = derive_metrics(far, spot, tf_dte) if far else None
 
         atm_iv = nm["atm_iv"] if nm else None
         far_iv = fm["atm_iv"] if fm else None
@@ -620,9 +695,9 @@ def main() -> None:
         )
 
         ed, ddte = earnings.get(tk, (None, None))
-        earn_in_window = bool(ed and ddte is not None and ddte <= near_dte)
+        earn_in_window = bool(ed and ddte is not None and ddte <= tn_dte)
         xd, xdte = dividends.get(tk, (None, None))
-        exdiv_in_window = bool(xd and xdte is not None and xdte <= near_dte)
+        exdiv_in_window = bool(xd and xdte is not None and xdte <= tn_dte)
 
         h = holdings.get(tk, {"shares": False, "options": False})
         strat = decide_strategy(
@@ -655,6 +730,7 @@ def main() -> None:
                 "held_as_shares": h["shares"],
                 "held_options": h["options"],
                 "strategy": strat,
+                "expiry_note": expiry_note.get(tk),
             }
         )
 

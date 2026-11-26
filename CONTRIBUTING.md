@@ -81,7 +81,7 @@ Soft signals (warn, not block):
 - [ ] `reads` / `writes` exhaustively list `personal/` paths; CI checks the body matches the declared contract.
 - [ ] No `personal/` literals with ticker-shaped neighbors in the body.
 - [ ] Ran `thetabook skills lint community/<slug>` locally — clean.
-- [ ] If shipping a `*.py` helper: it runs as `~/.local/bin/uv run python <path-to-helper>` and exits cleanly on `--help`.
+- [ ] If shipping a `*.py` helper: it runs as `uv run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/<slug>/<helper>.py"`, finding uv wherever it is installed (see `community/scan-watchlist`), and exits cleanly on `--help`.
 
 ## CI
 

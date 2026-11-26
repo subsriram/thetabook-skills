@@ -9,7 +9,7 @@ description: |
   user can tune without forking. Use when the user asks "what's
   interesting in my watchlist", "where's the rich vol", or wants a
   one-pass options-context table.
-version: 0.2.1
+version: 0.2.2
 tier: community
 allowed-tools: [Bash]
 reads: [personal/snapshots, personal/watchlist.toml, personal/iv_history]
@@ -40,10 +40,10 @@ For each ticker, fetches near + far chains, computes the vol-surface metrics, ap
 When `/scan-watchlist` runs, execute the helper via the Bash tool:
 
 ```
-~/.local/bin/uv run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/scan-watchlist/scan.py" $ARGUMENTS
+"$(for p in "$(command -v uv)" ~/.local/bin/uv /opt/homebrew/bin/uv /usr/local/bin/uv; do [ -x "$p" ] && echo "$p" && break; done || echo uv)" run python "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/skills/scan-watchlist/scan.py" $ARGUMENTS
 ```
 
-The `${CLAUDE_PROJECT_DIR:-$PWD}` form uses the harness-set env var when present and falls back to the current directory otherwise — covers both the standard slash-command flow and direct Bash-tool invocation from the project root. Print stdout to the user as-is. If stderr contains anything beyond `Scanning N tickers × 2 expiries...` and per-ticker `chain fetch failed: …` lines, surface it as bullet points.
+The `$(for p in … || echo uv)` part finds uv wherever it is installed: on `PATH`, at the standalone installer's `~/.local/bin/uv`, or under Homebrew. Each candidate must be an executable file, so a shell alias or function named `uv` is skipped; if none is found it falls back to plain `uv`, so the error names uv. The helper then runs the thetabook CLI with that same uv. The `${CLAUDE_PROJECT_DIR:-$PWD}` form uses the harness-set env var when present and falls back to the current directory otherwise — covers both the standard slash-command flow and direct Bash-tool invocation from the project root. Print stdout to the user as-is. If stderr contains anything beyond `Scanning N tickers × 2 expiries...` and per-ticker `chain fetch failed: …` lines, surface it as bullet points.
 
 After the helper exits, offer next steps: *"Want to dig into any of these? `/chain <T>` to drill into a chain, `/idea` to draft a trade, or `/evaluate <id>` if one maps to an existing idea."*
 
@@ -62,9 +62,10 @@ scan.py [TICKERS...] [flags]
 
 ### Expiry pick
 
-- `--expiry YYYY-MM-DD` — pin the near-leg expiry; overrides `--dte`.
+- `--expiry YYYY-MM-DD` — pin the near-leg expiry; overrides `--dte`. VIX/VIXW follow the pin only when they list that date; otherwise they take their own expiry nearest at or beyond the pinned DTE.
 - `--dte N` — near-leg target DTE (default 30). Picks the soonest expiry at or beyond N.
 - `--term-dte N` — far-leg target DTE for term-structure slope (default 60).
+- VIX and VIXW options expire on Wednesdays, off the monthly Friday cycle. They get their own near/far expiry at the same target DTEs (`--dte` / `--term-dte`), named in the Notes column; the scan-wide pair is taken from the first other ticker.
 
 ### Decision-tree thresholds (defaults are starting heuristics)
 

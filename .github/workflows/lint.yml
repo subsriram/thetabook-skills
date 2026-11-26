@@ -15,11 +15,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install thetabook from source
-        # Until thetabook publishes wheels, install from the main branch.
-        # Pin to a tag once one exists; the registry's lint contract is
-        # tied to the SkillFrontmatter schema in src/thetabook/skills/.
-        run: pip install "git+https://github.com/subsriram/thetabook.git@main"
+      - name: Install thetabook from PyPI
+        # Pinned: the registry's lint contract is tied to thetabook's
+        # SkillFrontmatter schema, so bump this deliberately.
+        run: pip install "thetabook==2.4.0"
 
       - name: Lint core/
         if: hashFiles('core/**/*.md') != ''
